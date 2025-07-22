@@ -32,7 +32,7 @@ router.post('/', authMiddleware, async (req, res) => {
       },
     });
 
-    res.status(201).json(newIdea);
+    res.status(201).json({"message":"idea created","idea_deatails":newIdea});
   } catch (error) {
     console.error('Failed to create idea:', error);
     res.status(500).json({ error: 'An error occurred while creating the idea.' });
