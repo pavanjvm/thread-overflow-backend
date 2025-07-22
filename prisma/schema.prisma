@@ -1,0 +1,184 @@
+// This is your Prisma schema file for the Ideation Portal.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Add this line for migrations
+}
+
+// User Model with Roles
+model User {
+  id                 String                @id @default(cuid())
+  name               String
+  email              String                @unique
+  password           String
+  avatarUrl          String?
+  role               UserRole              @default(USER)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  
+  // Ideation portal relations
+  ideas              Idea[]
+  subIdeas           SubIdea[]
+  proposals          Proposal[]
+  authoredPrototypes Prototype[]           @relation("PrototypeAuthor")
+  teamMemberships    PrototypeTeamMember[]
+  votes              Vote[]
+  comments           Comment[]
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+// Main Idea/Project Model
+model Idea {
+  id                   String   @id @default(cuid())
+  title                String
+  description          String
+  type                 IdeaType
+  potentialDollarValue Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  
+  subIdeas SubIdea[]
+}
+
+enum IdeaType {
+  IDEATION
+  SOLUTION_REQUEST
+}
+
+// Sub-Idea Model submitted within an Idea
+model SubIdea {
+  id          String        @id @default(cuid())
+  title       String
+  description String
+  status      SubIdeaStatus
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  
+  ideaId String
+  idea   Idea   @relation(fields: [ideaId], references: [id])
+  
+  proposals Proposal[]
+  votes     Vote[]
+  comments  Comment[]
+}
+
+enum SubIdeaStatus {
+  OPEN_FOR_PROTOTYPING
+  SELF_PROTOTYPING
+}
+
+// Proposal Model for a Sub-Idea
+model Proposal {
+  id              String         @id @default(cuid())
+  title           String
+  description     String
+  presentationUrl String?
+  status          ProposalStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  
+  subIdeaId String
+  subIdea   SubIdea @relation(fields: [subIdeaId], references: [id])
+  
+  prototypes Prototype[]
+  votes      Vote[]
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// Prototype Model built from a Proposal
+model Prototype {
+  id          String                @id @default(cuid())
+  title       String
+  description String
+  imageUrl    String
+  liveUrl     String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  
+  authorId String
+  author   User   @relation("PrototypeAuthor", fields: [authorId], references: [id])
+  
+  proposalId String
+  proposal   Proposal @relation(fields: [proposalId], references: [id])
+  
+  team     PrototypeTeamMember[]
+  votes    Vote[]
+  comments Comment[]
+}
+
+// Join table for Prototype team members
+model PrototypeTeamMember {
+  prototypeId String
+  prototype   Prototype @relation(fields: [prototypeId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  assignedAt  DateTime  @default(now())
+
+  @@id([prototypeId, userId])
+}
+
+// Generic Vote Model for Ideation Portal entities
+model Vote {
+  id        String   @id @default(cuid())
+  value     Int // 1 for upvote, -1 for downvote
+  createdAt DateTime @default(now())
+  
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  
+  subIdeaId   String?
+  subIdea     SubIdea?   @relation(fields: [subIdeaId], references: [id])
+  
+  proposalId  String?
+  proposal    Proposal?  @relation(fields: [proposalId], references: [id])
+  
+  prototypeId String?
+  prototype   Prototype? @relation(fields: [prototypeId], references: [id])
+
+  // Ensure a user can only vote once per item
+  @@unique([userId, subIdeaId])
+  @@unique([userId, proposalId])
+  @@unique([userId, prototypeId])
+}
+
+// Generic Comment Model for Ideation Portal entities
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+  
+  subIdeaId   String?
+  subIdea     SubIdea?   @relation(fields: [subIdeaId], references: [id])
+  
+  prototypeId String?
+  prototype   Prototype? @relation(fields: [prototypeId], references: [id])
+}
