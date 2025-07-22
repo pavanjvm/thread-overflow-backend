@@ -5,7 +5,7 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 const router = express.Router();
 const prisma = new PrismaClient();
 
-
+//creat a prototype for a proposal
 router.post('/submit/:proposalId', authMiddleware, async (req, res) => {
   const proposalId = parseInt(req.params.proposalId);
   const { title, description, imageUrl, liveUrl } = req.body;
@@ -71,4 +71,50 @@ router.post('/submit/:proposalId', authMiddleware, async (req, res) => {
     res.status(500).json({ error: 'An error occurred while creating the prototype.' });
   }
 });
+
+//get all prototypes for that particular idea id
+router.get('/:id/prototypes', async (req, res) => {
+  const ideaId = parseInt(req.params.id);
+
+  try {
+    const prototypesForIdea = await prisma.prototype.findMany({
+      // This is a deep relation filter: find all prototypes...
+      where: {
+        // ...where the related proposal's...
+        proposal: {
+          // ...related subIdea's...
+          subIdea: {
+            // ...ideaId matches our ideaId.
+            ideaId: ideaId,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc', // Show newest prototypes first
+      },
+      include: {
+        // Include details about the author of each prototype
+        author: {
+          select: {
+            name: true,
+            avatarUrl: true,
+          },
+        },
+        // Also include which proposal the prototype belongs to for context
+        proposal: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    res.status(200).json(prototypesForIdea);
+  } catch (error) {
+    console.error(`Failed to fetch prototypes for idea ${ideaId}:`, error);
+    res.status(500).json({ error: 'An error occurred while fetching prototypes.' });
+  }
+});
+
 export default router;
