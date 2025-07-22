@@ -35,4 +35,44 @@ router.post('/submit/:subIdeaId', authMiddleware, async (req, res) => {
   }
 });
 
+// gets all the proposals of particular ideaid
+router.get('/:id/proposals', async (req, res) => {
+  const ideaId = parseInt(req.params.id);
+
+  try {
+    const proposalsForIdea = await prisma.proposal.findMany({
+      // Find all proposals...
+      where: {
+        // ...where the related subIdea's ideaId matches the ID from the URL.
+        subIdea: {
+          ideaId: ideaId,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc', // Show newest proposals first
+      },
+      include: {
+        // Include details about the author of each proposal
+        author: {
+          select: {
+            name: true,
+            avatarUrl: true,
+          },
+        },
+        // Also include which sub-idea the proposal belongs to for context
+        subIdea: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    res.status(200).json(proposalsForIdea);
+  } catch (error) {
+    console.error(`Failed to fetch proposals for idea ${ideaId}:`, error);
+    res.status(500).json({ error: 'An error occurred while fetching proposals.' });
+  }
+});
 export default router;

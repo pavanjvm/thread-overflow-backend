@@ -40,7 +40,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 
-
+//this is for the dropdown in the submit proposal
 router.get('/open', async (req, res) => {
   try {
     const openSubIdeas = await prisma.subIdea.findMany({
@@ -53,6 +53,38 @@ router.get('/open', async (req, res) => {
     res.status(500).json({ error: 'An error occurred.' });
   }
 });
+ 
+//displaying subideas of the idea alone (eg. subideas of idea1)
+router.get('/:id/subideas', async (req, res) => {
+  const ideaId = parseInt(req.params.id);
+
+  try {
+    const subIdeas = await prisma.subIdea.findMany({
+      
+      where: {
+        ideaId: ideaId,
+      },
+      
+      include: {
+        author: {
+          select: {
+            name: true,
+            avatarUrl: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'asc' // Show oldest sub-ideas first
+      }
+    });
+
+    res.status(200).json(subIdeas);
+  } catch (error) {
+    console.error(`Failed to fetch sub-ideas for idea ${ideaId}:`, error);
+    res.status(500).json({ error: 'An error occurred while fetching sub-ideas.' });
+  }
+});
+
 
 
 export default router;
