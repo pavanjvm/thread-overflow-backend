@@ -5,6 +5,7 @@ model Idea {
   title                String
   description          String
   type                 IdeaType
+  status               IdeaStatus
   potentialDollarValue Int?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -102,6 +103,10 @@ model Comment {
   prototype   Prototype? @relation(fields: [prototypeId], references: [id])
 }
 
+enum IdeaStatus {
+  OPEN
+  CLOSED
+}
 // Ensure each enum is a complete block
 enum IdeaType {
   IDEATION
