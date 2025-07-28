@@ -28,6 +28,7 @@ router.post('/', authMiddleware, async (req, res) => {
         type,
         potentialDollarValue,
         authorId: authorId,
+        status: 'OPEN' 
       },
     });
     res.status(201).json({ message: "idea created", idea_details: newIdea });
@@ -37,14 +38,21 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+const IdeaStatus = {
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED'
+};
+
 //uses query parameter to get only the list of ideas that is opened or closed.
 router.get('/', async (req, res) => {
   const { status } = req.query;
   const where = {};
 
   // If a valid status is provided (e.g., ?status=OPEN), add it to the filter
-  if (status && Object.values(IdeaStatus).includes(status.toUpperCase())) {
-    where.status = status.toUpperCase();
+  const statusFilter = status?.toUpperCase() || 'OPEN';
+
+  if (Object.values(IdeaStatus).includes(statusFilter)) {
+    where.status = statusFilter;
   }
 
   try {
