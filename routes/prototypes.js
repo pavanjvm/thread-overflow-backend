@@ -4,9 +4,9 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
+router.use(authMiddleware);
 //creat a prototype for a proposal
-router.post('/submit/:proposalId', authMiddleware, async (req, res) => {
+router.post('/submit/:proposalId', async (req, res) => {
   const proposalId = parseInt(req.params.proposalId);
   const { title, description, imageUrl, liveUrl } = req.body;
   const authorId = req.user.userId;

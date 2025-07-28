@@ -1,13 +1,16 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middleware/authMiddleware.js';
+import { ProposalStatus } from '@prisma/client';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+router.use(authMiddleware);
 
 
-router.post('/submit/:subIdeaId', authMiddleware, async (req, res) => {
+router.post('/submit/:subIdeaId',  async (req, res) => {
   const subIdeaId = parseInt(req.params.subIdeaId);
+  console.log("contorl reacher here");
   const { title, description, presentationUrl } = req.body;
   const authorId = req.user.userId;
 
@@ -101,7 +104,7 @@ router.get('/:id/proposals', async (req, res) => {
 });
 
 //accept or reject proposal only the one who created the idea can accept or create
-router.patch('/:id/status', authMiddleware, async (req, res) => {
+router.patch('/:id/status',  async (req, res) => {
   try {
     // 1. Get data from the request
     const proposalId = parseInt(req.params.id);

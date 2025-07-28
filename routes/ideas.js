@@ -4,12 +4,12 @@ import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
+router.use(authMiddleware);
 /**
  * CREATE AN IDEA OR SOLUTION REQUEST
  * POST /api/ideas
  */
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/',  async (req, res) => {
   const { title, description, type, potentialDollarValue } = req.body;
   const authorId = req.user.userId;
 

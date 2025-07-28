@@ -35,35 +35,43 @@ router.post('/signup', async (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
-  }
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
 
-  try {
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
 
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' }
-    );
+    const token = jwt.sign(
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
 
-    res.status(200).json({ message: 'Login successful!', token });
-  } catch (error) {
-    console.error('Login Error:', error);
-    res.status(500).json({ error: 'An error occurred during login.' });
-  }
+    // Set the token in an HTTP-only cookie
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: false, // Allow cookies over HTTP in development
+    sameSite: 'lax', // 'strict' can block cross-origin dev requests; use 'lax' or 'none' if needed
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+  });
+
+    // Send a success response without the token in the body
+    res.status(200).json({ message: 'Login successful!' });
+  } catch (error) {
+    console.error('Login Error:', error);
+    res.status(500).json({ error: 'An error occurred during login.' });
+  }
 });
-
 
 export default router;

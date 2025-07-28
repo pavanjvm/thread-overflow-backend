@@ -2,18 +2,20 @@ import express from 'express';
 import { PrismaClient, SubIdeaStatus } from '@prisma/client';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
+
 const router = express.Router();
 const prisma = new PrismaClient();
+router.use(authMiddleware);
 
-
-router.post('/', authMiddleware, async (req, res) => {
-  // Get parent ideaId from the request BODY now
-  const { title, description, status, ideaId } = req.body;
+router.post('/:id/subideas', async (req, res) => {
+  // Get parent ideaId from the URL path parameter
+  const ideaId = req.params.id;
+  const { title, description, status } = req.body;
   const authorId = req.user.userId;
 
   // Validate input
-  if (!title || !description || !status || !ideaId) {
-    return res.status(400).json({ error: 'Title, description, status, and ideaId are required.' });
+  if (!title || !description || !status) {
+    return res.status(400).json({ error: 'Title, description, and status are required.' });
   }
   if (!Object.values(SubIdeaStatus).includes(status)) {
     return res.status(400).json({ error: 'Invalid status value.' });
@@ -26,7 +28,7 @@ router.post('/', authMiddleware, async (req, res) => {
         description,
         status,
         author: { connect: { id: authorId } },
-        idea: { connect: { id: parseInt(ideaId) } }, // Connect using ideaId from body
+        idea: { connect: { id: parseInt(ideaId) } }, // Connect using ideaId from URL path
       },
     });
     res.status(201).json(newSubIdea);
@@ -57,6 +59,7 @@ router.get('/open', async (req, res) => {
 //displaying subideas of the idea alone (eg. subideas of idea1)
 router.get('/:id/subideas', async (req, res) => {
   const ideaId = parseInt(req.params.id);
+
 
   try {
     const subIdeas = await prisma.subIdea.findMany({
