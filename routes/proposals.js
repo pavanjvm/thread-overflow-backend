@@ -1,161 +1,421 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import proposalService from '../services/proposalService.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
+import { validationMiddleware } from '../middleware/validationMiddleware.js';
+import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
+/**
+ * @route POST /api/proposals/submit/:subIdeaId
+ * @desc Submit a new proposal for a sub-idea
+ * @access Private
+ */
+router.post('/submit/:subIdeaId', 
+  authMiddleware,
+  rateLimitMiddleware({ windowMs: 15 * 60 * 1000, max: 5 }), // 5 proposals per 15 minutes
+  validationMiddleware,
+  async (req, res) => {
+    try {
+      const { subIdeaId } = req.params;
+      const { title, description, presentationUrl } = req.body;
+      const authorId = req.user.userId;
 
-router.post('/submit/:subIdeaId', authMiddleware, async (req, res) => {
-  const subIdeaId = parseInt(req.params.subIdeaId);
-  const { title, description, presentationUrl } = req.body;
-  const authorId = req.user.userId;
+      const result = await proposalService.createProposal(
+        { title, description, presentationUrl, subIdeaId },
+        authorId
+      );
 
-  if (!title || !description) {
-    return res.status(400).json({ error: 'Title and description are required.' });
+      res.status(201).json({
+        success: true,
+        message: 'Proposal submitted successfully',
+        data: result
+      });
+
+    } catch (error) {
+      console.error('Submit proposal route error:', error.message);
+
+      let statusCode = 500;
+      if (error.message.includes('must be') || 
+          error.message.includes('required') || 
+          error.message.includes('Invalid')) {
+        statusCode = 400;
+      } else if (error.message.includes('not found')) {
+        statusCode = 404;
+      } else if (error.message.includes('already have')) {
+        statusCode = 409;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'An error occurred while submitting the proposal',
+        data: null
+      });
+    }
   }
+);
 
+/**
+ * @route GET /api/proposals
+ * @desc Get proposals with filtering and pagination
+ * @access Public
+ */
+router.get('/', async (req, res) => {
   try {
-    // 1. Find the parent Idea's ID from the SubIdea
-    const subIdea = await prisma.subIdea.findUnique({
-      where: { id: subIdeaId },
-      select: { ideaId: true }, // We only need the ideaId
+    const {
+      ideaId,
+      subIdeaId,
+      authorId,
+      status,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const result = await proposalService.getProposals({
+      ideaId,
+      subIdeaId,
+      authorId,
+      status,
+      search,
+      page: parseInt(page),
+      limit: Math.min(parseInt(limit), 50), // Max 50 items per page
+      sortBy,
+      sortOrder
     });
 
-    if (!subIdea) {
-      return res.status(404).json({ error: 'Sub-idea not found.' });
-    }
+    res.status(200).json({
+      success: true,
+      message: 'Proposals fetched successfully',
+      data: result.proposals,
+      pagination: result.pagination
+    });
 
-    // 2. Use a transaction to do both actions at once
-    const [newProposal] = await prisma.$transaction([
-      // Action A: Create the new proposal
-      prisma.proposal.create({
-        data: {
-          title,
-          description,
-          presentationUrl,
-          author: { connect: { id: authorId } },
-          subIdea: { connect: { id: subIdeaId } },
-        },
-      }),
-      // Action B: Increment the counter on the parent Idea
-      prisma.idea.update({
-        where: { id: subIdea.ideaId },
-        data: {
-          totalProposals: {
-            increment: 1,
-          },
-        },
-      }),
-    ]);
-
-    res.status(201).json(newProposal);
   } catch (error) {
-    console.error('Failed to create proposal:', error);
-    if (error.code === 'P2025') {
-      return res.status(404).json({ error: 'Sub-idea not found.' });
+    console.error('Get proposals route error:', error.message);
+
+    let statusCode = 500;
+    if (error.message.includes('Invalid')) {
+      statusCode = 400;
     }
-    res.status(500).json({ error: 'An error occurred while creating the proposal.' });
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while fetching proposals',
+      data: null
+    });
   }
 });
 
-// gets all the proposals of particular ideaid
-router.get('/:id/proposals', async (req, res) => {
-  const ideaId = parseInt(req.params.id);
-
+/**
+ * @route GET /api/proposals/idea/:id
+ * @desc Get all proposals for a specific idea
+ * @access Public
+ */
+router.get('/idea/:id', async (req, res) => {
   try {
-    const proposalsForIdea = await prisma.proposal.findMany({
-      // Find all proposals...
-      where: {
-        // ...where the related subIdea's ideaId matches the ID from the URL.
-        subIdea: {
-          ideaId: ideaId,
-        },
-      },
-      orderBy: {
-        createdAt: 'desc', // Show newest proposals first
-      },
-      include: {
-        // Include details about the author of each proposal
-        author: {
-          select: {
-            name: true,
-            avatarUrl: true,
-          },
-        },
-        // Also include which sub-idea the proposal belongs to for context
-        subIdea: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-      },
+    const { id } = req.params;
+    const {
+      status,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const result = await proposalService.getProposalsForIdea(id, {
+      status,
+      search,
+      page: parseInt(page),
+      limit: Math.min(parseInt(limit), 50),
+      sortBy,
+      sortOrder
     });
 
-    res.status(200).json(proposalsForIdea);
+    res.status(200).json({
+      success: true,
+      message: 'Proposals for idea fetched successfully',
+      data: result.proposals,
+      pagination: result.pagination
+    });
+
   } catch (error) {
-    console.error(`Failed to fetch proposals for idea ${ideaId}:`, error);
-    res.status(500).json({ error: 'An error occurred while fetching proposals.' });
+    console.error('Get proposals for idea route error:', error.message);
+
+    let statusCode = 500;
+    if (error.message.includes('Invalid')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while fetching proposals',
+      data: null
+    });
   }
 });
 
-//accept or reject proposal only the one who created the idea can accept or create
-router.patch('/:id/status', authMiddleware, async (req, res) => {
+/**
+ * @route GET /api/proposals/stats
+ * @desc Get proposal statistics
+ * @access Public
+ */
+router.get('/stats', async (req, res) => {
   try {
-    // 1. Get data from the request
-    const proposalId = parseInt(req.params.id);
-    const loggedInUserId = req.user.userId;
-    const { status, rejectionReason } = req.body; // Expects { "status": "ACCEPTED" } or { "status": "REJECTED", "rejectionReason": "..." }
+    const { authorId, ideaId } = req.query;
+    
+    const stats = await proposalService.getProposalStats(authorId, ideaId);
 
-    // Validate the incoming status
-    if (!Object.values(ProposalStatus).includes(status)) {
-      return res.status(400).json({ error: 'Invalid status value.' });
-    }
-
-    // 2. Fetch the proposal AND the author of its parent idea
-    const proposal = await prisma.proposal.findUnique({
-      where: { id: proposalId },
-      select: {
-        subIdea: {
-          select: {
-            idea: {
-              select: {
-                authorId: true, // Get the original idea's author ID
-              },
-            },
-          },
-        },
-      },
+    res.status(200).json({
+      success: true,
+      message: 'Proposal statistics fetched successfully',
+      data: stats
     });
 
-    if (!proposal) {
-      return res.status(404).json({ error: 'Proposal not found.' });
-    }
-
-    // 3. Authorization Check: Is the current user the original idea's author?
-    const ideaAuthorId = proposal.subIdea.idea.authorId;
-    if (loggedInUserId !== ideaAuthorId) {
-      return res.status(403).json({ error: 'Forbidden: Only the idea author can accept or reject proposals.' });
-    }
-
-    // 4. If authorized, update the proposal's status
-    const updatedProposal = await prisma.proposal.update({
-      where: { id: proposalId },
-      data: {
-        status: status,
-        rejectionReason: status === 'REJECTED' ? rejectionReason : null,
-      },
-    });
-
-    res.status(200).json(updatedProposal);
   } catch (error) {
-    console.error('Failed to update proposal status:', error);
-    res.status(500).json({ error: 'An error occurred while updating the status.' });
+    console.error('Get proposal stats route error:', error.message);
+
+    let statusCode = 500;
+    if (error.message.includes('Invalid')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while fetching statistics',
+      data: null
+    });
   }
 });
 
+/**
+ * @route GET /api/proposals/my-proposals
+ * @desc Get current user's proposals
+ * @access Private
+ */
+router.get('/my-proposals', authMiddleware, async (req, res) => {
+  try {
+    const {
+      status,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
 
+    const result = await proposalService.getProposals({
+      authorId: req.user.userId,
+      status,
+      search,
+      page: parseInt(page),
+      limit: Math.min(parseInt(limit), 50),
+      sortBy,
+      sortOrder
+    });
 
+    res.status(200).json({
+      success: true,
+      message: 'Your proposals fetched successfully',
+      data: result.proposals,
+      pagination: result.pagination
+    });
+
+  } catch (error) {
+    console.error('Get my proposals route error:', error.message);
+
+    let statusCode = 500;
+    if (error.message.includes('Invalid')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while fetching your proposals',
+      data: null
+    });
+  }
+});
+
+/**
+ * @route GET /api/proposals/:id
+ * @desc Get a single proposal by ID
+ * @access Public
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const proposal = await proposalService.getProposalById(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Proposal fetched successfully',
+      data: proposal
+    });
+
+  } catch (error) {
+    console.error('Get proposal route error:', error.message);
+
+    let statusCode = 500;
+    if (error.message.includes('Invalid')) {
+      statusCode = 400;
+    } else if (error.message.includes('not found')) {
+      statusCode = 404;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while fetching the proposal',
+      data: null
+    });
+  }
+});
+
+/**
+ * @route PUT /api/proposals/:id
+ * @desc Update a proposal (author only)
+ * @access Private
+ */
+router.put('/:id', 
+  authMiddleware,
+  rateLimitMiddleware({ windowMs: 15 * 60 * 1000, max: 10 }), // 10 updates per 15 minutes
+  validationMiddleware,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, description, presentationUrl } = req.body;
+      const userId = req.user.userId;
+
+      const result = await proposalService.updateProposal(
+        id,
+        { title, description, presentationUrl },
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Proposal updated successfully',
+        data: result
+      });
+
+    } catch (error) {
+      console.error('Update proposal route error:', error.message);
+
+      let statusCode = 500;
+      if (error.message.includes('must be') || error.message.includes('Invalid')) {
+        statusCode = 400;
+      } else if (error.message.includes('Unauthorized')) {
+        statusCode = 403;
+      } else if (error.message.includes('not found')) {
+        statusCode = 404;
+      } else if (error.message.includes('Cannot update')) {
+        statusCode = 409;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'An error occurred while updating the proposal',
+        data: null
+      });
+    }
+  }
+);
+
+/**
+ * @route PATCH /api/proposals/:id/status
+ * @desc Update proposal status (accept/reject) - idea author only
+ * @access Private
+ */
+router.patch('/:id/status', 
+  authMiddleware,
+  rateLimitMiddleware({ windowMs: 15 * 60 * 1000, max: 20 }), // 20 status updates per 15 minutes
+  validationMiddleware,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, rejectionReason } = req.body;
+      const userId = req.user.userId;
+
+      const result = await proposalService.updateProposalStatus(
+        id,
+        { status, rejectionReason },
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Proposal status updated successfully',
+        data: result
+      });
+
+    } catch (error) {
+      console.error('Update proposal status route error:', error.message);
+
+      let statusCode = 500;
+      if (error.message.includes('must be') || error.message.includes('Invalid')) {
+        statusCode = 400;
+      } else if (error.message.includes('Unauthorized')) {
+        statusCode = 403;
+      } else if (error.message.includes('not found')) {
+        statusCode = 404;
+      } else if (error.message.includes('Cannot update')) {
+        statusCode = 409;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'An error occurred while updating the proposal status',
+        data: null
+      });
+    }
+  }
+);
+
+/**
+ * @route DELETE /api/proposals/:id
+ * @desc Delete a proposal
+ * @access Private (Author or Admin only)
+ */
+router.delete('/:id', 
+  authMiddleware,
+  rateLimitMiddleware({ windowMs: 15 * 60 * 1000, max: 5 }), // 5 deletes per 15 minutes
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+
+      const result = await proposalService.deleteProposal(id, userId, userRole);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: null
+      });
+
+    } catch (error) {
+      console.error('Delete proposal route error:', error.message);
+
+      let statusCode = 500;
+      if (error.message.includes('Invalid')) {
+        statusCode = 400;
+      } else if (error.message.includes('Unauthorized')) {
+        statusCode = 403;
+      } else if (error.message.includes('not found')) {
+        statusCode = 404;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'An error occurred while deleting the proposal',
+        data: null
+      });
+    }
+  }
+);
 
 export default router;

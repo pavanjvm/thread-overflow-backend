@@ -1,69 +1,171 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import authService from '../services/authService.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
-
+/**
+ * @route POST /signup
+ * @desc Register a new user
+ * @access Public
+ */
 router.post('/signup', async (req, res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email, and password are required.' });
-  }
-
   try {
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(409).json({ error: 'User with this email already exists.' });
-    }
+    const { name, email, password } = req.body;
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Call service
+    const result = await authService.signup({ name, email, password });
 
-    const newUser = await prisma.user.create({
-      data: { name, email, password: hashedPassword },
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: {
+        user: result.user,
+        token: result.token
+      }
     });
 
-    delete newUser.password;
-    res.status(201).json({ message: 'User created successfully!', user: newUser });
   } catch (error) {
-    console.error('Signup Error:', error);
-    res.status(500).json({ error: 'An error occurred during signup.' });
+    console.error('Signup route error:', error.message);
+
+    // Determine status code based on error type
+    let statusCode = 500;
+    if (error.message.includes('already exists')) {
+      statusCode = 409;
+    } else if (error.message.includes('must be') || error.message.includes('required') || error.message.includes('valid')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred during signup',
+      data: null
+    });
   }
 });
 
+/**
+ * @route POST /login
+ * @desc Authenticate user and get token
+ * @access Public
+ */
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
-  }
-
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
+    const { email, password } = req.body;
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
+    // Call service
+    const result = await authService.login({ email, password });
 
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '1d' }
-    );
+    res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      data: {
+        user: result.user,
+        token: result.token
+      }
+    });
 
-    res.status(200).json({ message: 'Login successful!', token });
   } catch (error) {
-    console.error('Login Error:', error);
-    res.status(500).json({ error: 'An error occurred during login.' });
+    console.error('Login route error:', error.message);
+
+    // Determine status code based on error type
+    let statusCode = 500;
+    if (error.message.includes('Invalid email or password')) {
+      statusCode = 401;
+    } else if (error.message.includes('required') || error.message.includes('valid')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred during login',
+      data: null
+    });
   }
 });
 
+/**
+ * @route POST /forgot-password
+ * @desc Send password reset email
+ * @access Public
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Call service
+    const result = await authService.forgotPassword(email);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: process.env.NODE_ENV === 'development' ? { resetToken: result.resetToken } : null
+    });
+
+  } catch (error) {
+    console.error('Forgot password route error:', error.message);
+
+    // Determine status code based on error type
+    let statusCode = 500;
+    if (error.message.includes('valid email')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while processing your request',
+      data: null
+    });
+  }
+});
+
+/**
+ * @route POST /reset-password
+ * @desc Reset user password using reset token
+ * @access Public
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    // Call service
+    const result = await authService.resetPassword(token, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      data: null
+    });
+
+  } catch (error) {
+    console.error('Reset password route error:', error.message);
+
+    // Determine status code based on error type
+    let statusCode = 500;
+    if (error.message.includes('Invalid or expired')) {
+      statusCode = 400;
+    } else if (error.message.includes('must be') || error.message.includes('must contain')) {
+      statusCode = 400;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || 'An error occurred while resetting your password',
+      data: null
+    });
+  }
+});
+
+/**
+ * @route POST /logout
+ * @desc Logout user (client-side token removal)
+ * @access Private
+ */
+router.post('/logout', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Logout successful. Please remove the token from client storage.',
+    data: null
+  });
+});
 
 export default router;
