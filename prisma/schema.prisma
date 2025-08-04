@@ -172,6 +172,7 @@ model User {
   password           String
   avatarUrl          String?
   bio                String?
+  stars              Int                   @default(0)
   role               UserRole              @default(USER)
   createdAt          DateTime              @default(now())
   updatedAt          DateTime              @updatedAt
