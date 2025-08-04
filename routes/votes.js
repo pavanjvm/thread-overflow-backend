@@ -11,7 +11,6 @@ router.post('/subideas/:subIdeaId', async (req, res) => {
   try {
     const { value } = req.body;
     const subIdeaId = parseInt(req.params.subIdeaId);
-    console.log(subIdeaId);
     const userId = req.user.userId;
 
     if (!userId) {
@@ -199,7 +198,7 @@ router.post('/prototypes/:prototypeId', async (req, res) => {
 router.get('/subideas', async (req, res) => {
   try {
     const subIdeaId = req.query.subIdeaId;
-    const userId = req.user?.id;
+    const userId = req.user.userId;
 
     if (!subIdeaId) {
       return res.status(400).json({ error: 'subIdeaId is required as query parameter' });
