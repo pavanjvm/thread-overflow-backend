@@ -37,4 +37,27 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+router.get('/users', authMiddleware, async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        role: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc', // or 'asc' based on preference
+      },
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
 export default router;

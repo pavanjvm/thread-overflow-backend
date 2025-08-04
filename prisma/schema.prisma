@@ -34,11 +34,11 @@ model Idea {
   potentialDollarValue Int?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
-  totalProposals       Int          @default(0)
-  totalPrototypes      Int          @default(0)
   authorId             Int
   author               User       @relation(fields: [authorId], references: [id])
   subIdeas             SubIdea[]
+  totalProposals       Int        @default(0)
+  totalPrototypes      Int        @default(0)
 }
 
 model SubIdea {
@@ -130,6 +130,11 @@ model Comment {
   subIdea     SubIdea?   @relation(fields: [subIdeaId], references: [id])
   prototypeId Int?
   prototype   Prototype? @relation(fields: [prototypeId], references: [id])
+
+  // Add these fields for nested replies:
+  parentCommentId Int?
+  parentComment   Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id])
+  replies         Comment[] @relation("CommentReplies")
 }
 
 enum IdeaStatus {

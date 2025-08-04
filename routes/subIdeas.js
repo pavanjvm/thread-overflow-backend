@@ -88,6 +88,4 @@ router.get('/:id/subideas', async (req, res) => {
   }
 });
 
-
-
 export default router;

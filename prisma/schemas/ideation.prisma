@@ -103,6 +103,11 @@ model Comment {
   subIdea     SubIdea?   @relation(fields: [subIdeaId], references: [id])
   prototypeId Int?
   prototype   Prototype? @relation(fields: [prototypeId], references: [id])
+  
+  // Add these fields for nested replies:
+  parentCommentId Int?
+  parentComment   Comment? @relation("CommentReplies", fields: [parentCommentId], references: [id])
+  replies         Comment[] @relation("CommentReplies")
 }
 
 enum IdeaStatus {
