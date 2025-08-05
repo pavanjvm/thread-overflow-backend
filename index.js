@@ -20,7 +20,7 @@ app.use(express.json());
 
 
 app.use(cors({
-  origin: ['http://localhost:4000', 'http://localhost:9002', 'http://localhost:3002'], // ✅ allow both origins
+  origin: ['http://localhost:4000', 'http://localhost:9002', 'http://localhost:3001'], // ✅ allow both origins
   credentials: true
 }));
 app.use('/api/auth', authRouter);
