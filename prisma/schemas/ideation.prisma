@@ -6,7 +6,7 @@ model Idea {
   description          String
   type                 IdeaType
   status               IdeaStatus
-  potentialDollarValue Int?
+  potentialBenefits    String[]
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   authorId             Int

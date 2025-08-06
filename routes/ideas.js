@@ -9,15 +9,22 @@ router.use(authMiddleware);
  * CREATE AN IDEA OR SOLUTION REQUEST
  * POST /api/ideas
  */
-router.post('/',  async (req, res) => {
-  const { title, description, type, potentialDollarValue } = req.body;
+router.post('/', async (req, res) => {
+  const { title, description, type, potentialBenefits } = req.body;
   const authorId = req.user.userId;
 
+  // Basic validations
   if (!title || !description || !type) {
     return res.status(400).json({ error: 'Title, description, and type are required.' });
   }
+
   if (type !== 'IDEATION' && type !== 'SOLUTION_REQUEST') {
     return res.status(400).json({ error: "Type must be either 'IDEATION' or 'SOLUTION_REQUEST'." });
+  }
+
+  // Validate that potentialBenefits is an array of strings (if provided)
+  if (potentialBenefits && (!Array.isArray(potentialBenefits) || !potentialBenefits.every(b => typeof b === 'string'))) {
+    return res.status(400).json({ error: 'potentialBenefits must be an array of strings.' });
   }
 
   try {
@@ -26,17 +33,19 @@ router.post('/',  async (req, res) => {
         title,
         description,
         type,
-        potentialDollarValue,
-        authorId: authorId,
-        status: 'OPEN' 
+        potentialBenefits: potentialBenefits || [], // default to empty array if not provided
+        authorId,
+        status: 'OPEN',
       },
     });
-    res.status(201).json({ message: "idea created", idea_details: newIdea });
+
+    res.status(201).json({ message: 'Idea created', idea_details: newIdea });
   } catch (error) {
     console.error('Failed to create idea:', error);
     res.status(500).json({ error: 'An error occurred while creating the idea.' });
   }
 });
+
 
 const IdeaStatus = {
   OPEN: 'OPEN',
