@@ -31,7 +31,14 @@ router.post('/:id/subideas', async (req, res) => {
         idea: { connect: { id: parseInt(ideaId) } }, // Connect using ideaId from URL path
       },
     });
+    await prisma.user.update({
+      where: { id: authorId },
+      data: {
+        stars: { increment: 1 }, // You can change the number of stars awarded here
+      },
+    });
     res.status(201).json(newSubIdea);
+
   } catch (error) {
     console.error('Failed to create sub-idea:', error);
     if (error.code === 'P2025') {

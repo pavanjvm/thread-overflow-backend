@@ -51,7 +51,12 @@ router.post('/submit/:subIdeaId',  async (req, res) => {
         },
       }),
     ]);
-
+    await prisma.user.update({
+      where: { id: authorId },
+      data: {
+        stars: { increment: 2 }, // You can change the number of stars awarded here
+      },
+    });
     res.status(201).json(newProposal);
   } catch (error) {
     console.error('Failed to create proposal:', error);

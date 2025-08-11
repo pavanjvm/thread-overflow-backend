@@ -98,6 +98,13 @@ router.post('/submit/:proposalId', async (req, res) => {
         },
       });
 
+      await tx.user.update({
+      where: { id: authorId },
+      data: {
+        stars: { increment: 2 }, // You can change the number of stars awarded here
+      },
+      });
+
       // Fetch the complete prototype with team details for response
       const completePrototype = await tx.prototype.findUnique({
         where: { id: newPrototype.id },
@@ -185,7 +192,7 @@ router.get('/:id/prototypes', async (req, res) => {
         },
       },
     });
-
+    
     res.status(200).json(prototypesForIdea);
   } catch (error) {
     console.error(`Failed to fetch prototypes for idea ${ideaId}:`, error);

@@ -11,7 +11,7 @@ model Idea {
   updatedAt            DateTime @updatedAt
   authorId             Int
   author               User     @relation(fields: [authorId], references: [id])
-  subIdeas             SubIdea[]
+  subIdeas             SubIdea[]  
   totalProposals       Int        @default(0)
   totalPrototypes      Int        @default(0)
 }
@@ -27,9 +27,9 @@ model SubIdea {
   author      User          @relation(fields: [authorId], references: [id])
   ideaId      Int
   idea        Idea          @relation(fields: [ideaId], references: [id])
-  proposals   Proposal[]
-  votes       Vote[]
-  comments    Comment[]
+  proposals   Proposal[]    
+  votes       Vote[]        
+  comments    Comment[]     
 }
 
 model Proposal {
@@ -45,8 +45,8 @@ model Proposal {
   author          User           @relation(fields: [authorId], references: [id])
   subIdeaId       Int
   subIdea         SubIdea        @relation(fields: [subIdeaId], references: [id])
-  prototypes      Prototype[]
-  votes           Vote[]
+  prototypes      Prototype[]    
+  votes           Vote[]         
 }
 
 model Prototype {
@@ -61,9 +61,9 @@ model Prototype {
   author      User     @relation("PrototypeAuthor", fields: [authorId], references: [id])
   proposalId  Int
   proposal    Proposal @relation(fields: [proposalId], references: [id])
-  team        PrototypeTeamMember[]
-  votes       Vote[]
-  comments    Comment[]
+  team        PrototypeTeamMember[]   
+  votes       Vote[]    
+  comments    Comment[]   
 }
 
 model PrototypeTeamMember {

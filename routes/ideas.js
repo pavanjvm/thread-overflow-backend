@@ -39,6 +39,13 @@ router.post('/', async (req, res) => {
       },
     });
 
+    await prisma.user.update({
+      where: { id: authorId },
+      data: {
+        stars: { increment: 2 }, // You can change the number of stars awarded here
+      },
+    });
+
     res.status(201).json({ message: 'Idea created', idea_details: newIdea });
   } catch (error) {
     console.error('Failed to create idea:', error);
@@ -106,7 +113,7 @@ router.get('/:id', async (req, res) => {
       select: {
         title: true,
         description: true,
-        potentialDollarValue: true,
+        potentialBenefits: true,
         status:true,
         createdAt: true,
         authorId: true,
@@ -187,68 +194,117 @@ router.patch('/:id/close', async (req, res) => {
  * DELETE /api/ideas/:id
  */
 router.delete('/:id', async (req, res) => {
-  const ideaId = parseInt(req.params.id);
-  const userId = req.user.userId;
-  const userRole = req.user.role; // Assuming role is available in req.user
-
-  if (isNaN(ideaId)) {
-    return res.status(400).json({ error: 'Invalid idea ID.' });
-  }
+  const ideaId = parseInt(req.params.id, 10);
 
   try {
-    // First check if the idea exists and get author info
     const existingIdea = await prisma.idea.findUnique({
       where: { id: ideaId },
-      select: { 
-        id: true, 
-        authorId: true, 
-        title: true,
-        _count: {
-          subIdeas: true
-        }
-      }
+      select: { id: true, authorId: true }
     });
 
     if (!existingIdea) {
-      return res.status(404).json({ error: 'Idea not found.' });
+      return res.status(404).json({ error: 'Idea not found' });
     }
 
-    // Check permissions: only the author or admin can delete
-    if (existingIdea.authorId !== userId && userRole !== 'ADMIN') {
-      return res.status(403).json({ 
-        error: 'You can only delete your own ideas or you must be an admin.' 
+    // Wrap everything in a transaction
+    await prisma.$transaction(async (tx) => {
+      // 1️⃣ Fetch all related entities with authors
+      const subIdeas = await tx.subIdea.findMany({
+        where: { ideaId },
+        select: { authorId: true, id: true }
       });
-    }
 
-    // Check if there are related sub-ideas (optional business logic)
-    if (existingIdea._count.subIdeas > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete idea with existing sub-ideas. Please delete all sub-ideas first.' 
+      const proposals = await tx.proposal.findMany({
+        where: { subIdea: { ideaId } },
+        select: { authorId: true, id: true }
       });
-    }
 
-    // Delete the idea (this will cascade delete related records based on your schema)
-    await prisma.idea.delete({
-      where: { id: ideaId }
+      const prototypes = await tx.prototype.findMany({
+        where: { proposal: { subIdea: { ideaId } } },
+        select: { authorId: true }
+      });
+
+      // 2️⃣ Calculate stars to deduct
+      const starsToDeduct = {};
+
+      // Idea → +1 star originally
+      starsToDeduct[existingIdea.authorId] =
+        (starsToDeduct[existingIdea.authorId] || 0) + 1;
+
+      // SubIdeas → +1 star each
+      subIdeas.forEach(s => {
+        starsToDeduct[s.authorId] = (starsToDeduct[s.authorId] || 0) + 1;
+      });
+
+      // Proposals → +2 stars each
+      proposals.forEach(p => {
+        starsToDeduct[p.authorId] = (starsToDeduct[p.authorId] || 0) + 2;
+      });
+
+      // Prototypes → +3 stars each
+      prototypes.forEach(pr => {
+        starsToDeduct[pr.authorId] = (starsToDeduct[pr.authorId] || 0) + 3;
+      });
+
+      // 3️⃣ Deduct stars from each user
+      for (const [authorId, deduction] of Object.entries(starsToDeduct)) {
+        await tx.user.update({
+          where: { id: parseInt(authorId, 10) },
+          data: { stars: { decrement: deduction } }
+        });
+      }
+
+      // 4️⃣ Delete related votes
+      await tx.vote.deleteMany({
+        where: {
+          OR: [
+            { subIdea: { ideaId } },
+            { proposal: { subIdea: { ideaId } } },
+            { prototype: { proposal: { subIdea: { ideaId } } } }
+          ]
+        }
+      });
+
+      // 5️⃣ Delete related comments
+      await tx.comment.deleteMany({
+        where: {
+          OR: [
+            { subIdea: { ideaId } },
+            { prototype: { proposal: { subIdea: { ideaId } } } }
+          ]
+        }
+      });
+
+      // 6️⃣ Delete prototype team members
+      await tx.prototypeTeamMember.deleteMany({
+        where: { prototype: { proposal: { subIdea: { ideaId } } } }
+      });
+
+      // 7️⃣ Delete prototypes
+      await tx.prototype.deleteMany({
+        where: { proposal: { subIdea: { ideaId } } }
+      });
+
+      // 8️⃣ Delete proposals
+      await tx.proposal.deleteMany({
+        where: { subIdea: { ideaId } }
+      });
+
+      // 9️⃣ Delete subIdeas
+      await tx.subIdea.deleteMany({
+        where: { ideaId }
+      });
+
+      // 🔟 Delete the idea itself
+      await tx.idea.delete({
+        where: { id: ideaId }
+      });
     });
 
-    res.status(200).json({ 
-      message: 'Idea deleted successfully',
-      deletedIdeaId: ideaId,
-      title: existingIdea.title
-    });
-
+    res.json({ message: 'Idea and all related data deleted successfully with stars updated' });
   } catch (error) {
-    console.error(`Failed to delete idea ${ideaId}:`, error);
-    
-    // Handle foreign key constraint errors
-    if (error.code === 'P2003') {
-      return res.status(400).json({ 
-        error: 'Cannot delete idea due to related records. Please delete all related sub-ideas, proposals, and prototypes first.' 
-      });
-    }
-    
-    res.status(500).json({ error: 'An error occurred while deleting the idea.' });
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete idea' });
   }
 });
 export default router;

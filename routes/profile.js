@@ -97,7 +97,7 @@ router.get('/:userId/overview', async (req, res) => {
           description: true,
           type: true,
           status: true,
-          potentialDollarValue: true,
+          potentialBenefits: true,
           createdAt: true,
           updatedAt: true,
         },
